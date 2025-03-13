@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration API - Mistral OCR</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Icônes Heroicons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Police Poppins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neo-pink: #ff6bb3;
+            --neo-blue: #19b5fe;
+            --neo-green: #1aff6a;
+            --neo-black: #000000;
+            --neo-white: #ffffff;
+        }
+        
+        body {
+            background-image: url('/static/images/gradient-bg.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            min-height: 100vh;
+            font-family: 'Poppins', sans-serif;
+        }
+        
+        /* Cartes principales */
+        .neo-card {
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.2);
+            position: relative;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        .neo-card-pink {
+            background-color: rgba(255, 107, 179, 0.85);
+            color: var(--neo-black);
+        }
+        
+        .neo-card-white {
+            background-color: rgba(255, 255, 255, 0.85);
+            color: var(--neo-black);
+        }
+        
+        /* Indicateurs d'état */
+        .status-dots {
+            display: flex;
+            gap: 8px;
+            position: absolute;
+            top: 12px;
+            right: 12px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .status-dot-green {
+            background-color: var(--neo-green);
+        }
+        
+        .status-dot-pink {
+            background-color: var(--neo-pink);
+        }
+        
+        .status-dot-blue {
+            background-color: var(--neo-blue);
+        }
+        
+        /* Boutons stylisés */
+        .neo-button {
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-weight: bold;
+            text-align: center;
+            display: block;
+            width: 100%;
+            cursor: pointer;
+            box-shadow: 3px 3px 0px rgba(0,0,0,0.2);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        
+        .neo-button:active {
+            transform: translate(2px, 2px);
+            box-shadow: 1px 1px 0px rgba(0,0,0,0.2);
+        }
+        
+        .neo-button-pink {
+            background-color: var(--neo-pink);
+            color: var(--neo-white);
+        }
+        
+        .neo-button-red {
+            background-color: #ff4757;
+            color: var(--neo-white);
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- En-tête -->
+        <header class="text-center mb-12 neo-card neo-card-pink">
+            <div class="status-dots">
+                <div class="status-dot status-dot-green"></div>
+                <div class="status-dot status-dot-blue"></div>
+                <div class="status-dot status-dot-pink"></div>
+            </div>
+            <h1 class="text-4xl font-bold text-white mb-2">Mistral OCR</h1>
+            <p class="text-white">Connexion API rapide</p>
+        </header>
+
+        <!-- Formulaire de configuration -->
+        <div class="neo-card neo-card-white p-8 mb-8">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold text-gray-800">Configuration de votre clé API</h2>
+                <a href="{{ url_for('index') }}" class="text-indigo-600 hover:text-indigo-800 flex items-center">
+                    <i class="fas fa-arrow-left mr-2"></i> Retour à l'accueil
+                </a>
+            </div>
+
+            <!-- Messages flash -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="mb-4 p-4 rounded-md {% if category == 'error' %}bg-red-100 text-red-700{% elif category == 'warning' %}bg-yellow-100 text-yellow-700{% else %}bg-green-100 text-green-700{% endif %}">
+                            <p>{{ message }}</p>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="mb-8">
+                <p class="text-gray-600 mb-6">
+                    Pour libérer toute la puissance de Mistral OCR, connectez votre clé API personnelle. Cette étape simple vous donne accès à la technologie de reconnaissance de texte la plus avancée.
+                </p>
+                
+                <div class="neo-card" style="background-color: rgba(238, 242, 255, 0.85);">
+                    <h3 class="font-medium text-indigo-800 mb-2">💡 Comment obtenir votre clé API en 2 minutes</h3>
+                    <ol class="list-decimal list-inside text-gray-700 space-y-2">
+                        <li>Créez un compte sur <a href="https://console.mistral.ai/" target="_blank" rel="noopener" class="text-indigo-600 hover:underline">console.mistral.ai</a></li>
+                        <li>Accédez à la section "API Keys" dans votre tableau de bord</li>
+                        <li>Cliquez sur "Create API Key" et donnez un nom à votre clé</li>
+                        <li>Copiez la clé générée (elle commence généralement par "mis_")</li>
+                        <li>Collez cette clé dans le formulaire ci-dessous</li>
+                    </ol>
+                </div>
+                
+                <form method="POST" action="{{ url_for('api_config') }}" class="space-y-4 mt-6">
+                    <div class="space-y-2">
+                        <label for="api_key" class="block text-sm font-medium text-gray-700">Votre clé API Mistral</label>
+                        <div class="relative">
+                            <input type="password" id="api_key" name="api_key" placeholder="mis_xxxxxxxxxxxxxxxxxxxxxxxx" 
+                                   class="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                                   value="{{ masked_api_key }}">
+                            <button type="button" id="toggle-visibility" class="absolute right-3 top-3 text-gray-500 hover:text-gray-700" title="Afficher/masquer la clé API">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-500">Votre clé API est stockée uniquement dans votre session et n'est jamais partagée.</p>
+                    </div>
+                    
+                    <div class="flex space-x-4">
+                        <button type="submit" class="neo-button neo-button-pink flex-1 py-3 text-white rounded-md flex items-center justify-center">
+                            <i class="fas fa-save mr-2"></i> Connecter mon compte
+                        </button>
+                    </div>
+                </form>
+                
+                {% if masked_api_key %}
+                <form method="POST" action="{{ url_for('clear_api_key') }}" class="mt-4">
+                    <button type="submit" class="neo-button neo-button-red w-full py-3 text-white rounded-md flex items-center justify-center">
+                        <i class="fas fa-trash-alt mr-2"></i> Déconnecter mon compte
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+            
+            <div class="border-t border-gray-200 pt-6">
+                <h3 class="font-medium text-gray-800 mb-2">🔒 Sécurité et confidentialité garanties</h3>
+                <p class="text-gray-600 mb-4">
+                    Votre clé API est stockée uniquement dans votre session de navigateur et n'est jamais partagée avec d'autres utilisateurs.
+                    Pour une sécurité maximale, nous vous recommandons de :
+                </p>
+                <ul class="list-disc list-inside text-gray-600 space-y-1">
+                    <li>Ne jamais partager votre clé API avec d'autres personnes</li>
+                    <li>Utiliser une clé API dédiée pour cette application</li>
+                    <li>Définir des limites d'utilisation pour votre clé API dans la console Mistral</li>
+                    <li>Révoquer votre clé API si vous soupçonnez qu'elle a été compromise</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Script pour afficher/masquer la clé API
+        document.getElementById('toggle-visibility').addEventListener('click', function() {
+            const apiKeyInput = document.getElementById('api_key');
+            const eyeIcon = this.querySelector('i');
+            
+            if (apiKeyInput.type === 'password') {
+                apiKeyInput.type = 'text';
+                eyeIcon.classList.remove('fa-eye');
+                eyeIcon.classList.add('fa-eye-slash');
+            } else {
+                apiKeyInput.type = 'password';
+                eyeIcon.classList.remove('fa-eye-slash');
+                eyeIcon.classList.add('fa-eye');
+            }
+        });
+    </script>
+</body>
+</html>
