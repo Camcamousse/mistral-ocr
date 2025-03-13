@@ -30,13 +30,17 @@ import time
 
 # Importer WeasyPrint pour la conversion HTML vers PDF
 try:
-    # Utilisation de WeasyPrint version 52.5
-    from weasyprint import HTML
+    # Désactiver WeasyPrint par défaut pour éviter les problèmes de dépendances
+    # from weasyprint import HTML
     # Définir une variable pour indiquer que la fonctionnalité PDF est disponible
-    PDF_AVAILABLE = True
+    PDF_AVAILABLE = False
+    print("WeasyPrint est désactivé par défaut. Pour l'activer, décommentez la ligne d'import dans mistral_ocr.py")
 except ImportError:
     # Si WeasyPrint n'est pas installé, désactiver la fonctionnalité PDF
     PDF_AVAILABLE = False
+    print("WeasyPrint n'est pas installé. L'exportation PDF ne sera pas disponible.")
+    print("Pour l'installer sur macOS: brew install cairo pango gdk-pixbuf libffi")
+    print("Puis: pip install weasyprint==52.5")
 
 
 class MistralOCR:
@@ -247,6 +251,7 @@ class MistralOCR:
                 if os.path.exists(html_file):
                     try:
                         # Générer le PDF à partir du HTML
+                        from weasyprint import HTML
                         HTML(filename=html_file).write_pdf(pdf_file)
                         print(f"PDF généré avec succès: {pdf_file}")
                     except Exception as e:
@@ -255,7 +260,8 @@ class MistralOCR:
                     print(f"Le fichier HTML {html_file} n'existe pas, impossible de générer le PDF")
             else:
                 print("WeasyPrint n'est pas installé. L'exportation PDF n'est pas disponible.")
-                print("Pour l'installer: pip install weasyprint==52.5")
+                print("Pour l'installer sur macOS: brew install cairo pango gdk-pixbuf libffi")
+                print("Puis: pip install weasyprint==52.5")
         except Exception as e:
             print(f"Erreur lors de la sauvegarde du résultat: {str(e)}")
     
