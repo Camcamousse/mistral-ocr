@@ -19,18 +19,13 @@ from mistral_ocr import MistralOCR, PDF_AVAILABLE
 # Charger les variables d'environnement
 load_dotenv()
 
-# Importer WeasyPrint si disponible
-try:
-    # Utilisation de WeasyPrint version 52.5
-    from weasyprint import HTML
-    WEASYPRINT_AVAILABLE = True
-except ImportError:
-    WEASYPRINT_AVAILABLE = False
-    print("WeasyPrint n'est pas installé. L'exportation PDF ne sera pas disponible.")
-    print("Pour l'installer: pip install weasyprint==52.5")
-
-# Utiliser la variable de mistral_ocr.py
-WEASYPRINT_AVAILABLE = PDF_AVAILABLE
+# Désactiver WeasyPrint par défaut pour éviter les problèmes de dépendances
+WEASYPRINT_AVAILABLE = False
+print("WeasyPrint est désactivé par défaut. L'exportation PDF ne sera pas disponible.")
+print("Pour l'activer sur macOS:")
+print("1. Installez les dépendances: brew install cairo pango gdk-pixbuf libffi")
+print("2. Puis: pip install weasyprint==52.5")
+print("3. Décommentez les lignes d'import dans mistral_ocr.py et app.py")
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -187,7 +182,8 @@ def process_ocr(task_id, api_key, file_path=None, url=None, include_images=True,
                 
                 # Convertir HTML en PDF
                 try:
-                    # Générer le PDF à partir du HTML avec WeasyPrint v52.5
+                    # Générer le PDF à partir du HTML avec WeasyPrint
+                    from weasyprint import HTML
                     HTML(filename=html_file).write_pdf(pdf_file)
                     ocr_tasks[task_id]['result_paths']['pdf'] = pdf_file
                 except Exception as e:
