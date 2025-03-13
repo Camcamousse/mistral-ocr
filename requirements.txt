@@ -1,8 +1,10 @@
-flask==2.2.3
-requests==2.28.2
-Pillow==9.4.0
+flask==2.3.3
+requests==2.31.0
 python-dotenv==1.0.0
-weasyprint==52.5
-Werkzeug==2.2.3
-waitress==2.1.2
-tqdm==4.64.1
+Pillow==10.0.0
+mistralai==0.0.10
+werkzeug==2.3.7
+# WeasyPrint est optionnel et nécessite des dépendances système
+# Pour l'installer sur macOS:
+# 1. brew install cairo pango gdk-pixbuf libffi
+# 2. pip install weasyprint==52.5
