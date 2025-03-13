@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mistral OCR - Extraction de texte avec IA</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .hero {
+            background: linear-gradient(135deg, #6e8efb 0%, #a777e3 100%);
+            color: white;
+            padding: 4rem 0;
+            margin-bottom: 2rem;
+            border-radius: 0 0 20px 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            margin-bottom: 1.5rem;
+            border: none;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+        .card-header {
+            background: linear-gradient(135deg, #6e8efb 0%, #a777e3 100%);
+            color: white;
+            border-radius: 15px 15px 0 0 !important;
+            font-weight: bold;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #6e8efb 0%, #a777e3 100%);
+            border: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5d7df9 0%, #9566d9 100%);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+        }
+        .drop-zone {
+            border: 2px dashed #a777e3;
+            border-radius: 10px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            background-color: #f8f9fa;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            background-color: #f0e6ff;
+            border-color: #6e8efb;
+        }
+        .drop-zone-prompt {
+            margin-bottom: 1rem;
+            font-size: 1.25rem;
+            color: #6c757d;
+        }
+        .drop-zone-input {
+            display: none;
+        }
+        .progress {
+            height: 10px;
+            border-radius: 5px;
+        }
+        .progress-bar {
+            background: linear-gradient(135deg, #6e8efb 0%, #a777e3 100%);
+        }
+        .result-card {
+            display: none;
+        }
+        .format-badge {
+            font-size: 0.8rem;
+            padding: 0.3rem 0.6rem;
+            margin-right: 0.5rem;
+            border-radius: 20px;
+        }
+        .format-badge.json {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .format-badge.md {
+            background-color: #17a2b8;
+            color: white;
+        }
+        .format-badge.html {
+            background-color: #28a745;
+            color: white;
+        }
+        .format-badge.pdf {
+            background-color: #dc3545;
+            color: white;
+        }
+        .api-warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 5px;
+        }
+        .tab-content {
+            padding-top: 1.5rem;
+        }
+        .nav-tabs .nav-link {
+            border-radius: 10px 10px 0 0;
+            font-weight: 500;
+        }
+        .nav-tabs .nav-link.active {
+            background-color: #fff;
+            border-color: #dee2e6 #dee2e6 #fff;
+            color: #6e8efb;
+        }
+        .url-input {
+            border-radius: 10px;
+            padding: 0.75rem;
+            border: 2px solid #ced4da;
+        }
+        .url-input:focus {
+            border-color: #a777e3;
+            box-shadow: 0 0 0 0.25rem rgba(167, 119, 227, 0.25);
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 2rem 0;
+            margin-top: 3rem;
+            border-top: 1px solid #e9ecef;
+        }
+        .result-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .btn-sm {
+            border-radius: 20px;
+            padding: 0.25rem 0.75rem;
+        }
+        .error-message {
+            color: #dc3545;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            padding: 1rem;
+            margin-top: 1rem;
+            display: none;
+        }
+        .format-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .format-option {
+            display: flex;
+            align-items: center;
+            background-color: #f8f9fa;
+            border: 1px solid #ced4da;
+            border-radius: 20px;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .format-option:hover {
+            background-color: #e9ecef;
+        }
+        .format-option input {
+            margin-right: 0.5rem;
+        }
+        .format-option.disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="hero text-center">
+        <div class="container">
+            <h1 class="display-4 fw-bold">Mistral OCR</h1>
+            <p class="lead">Extraction de texte intelligente avec l'IA Mistral</p>
+        </div>
+    </div>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% if not has_api_key %}
+        <div class="api-warning mb-4">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-exclamation-triangle me-3 fs-4"></i>
+                <div>
+                    <h5 class="mb-1">Clé API Mistral non configurée</h5>
+                    <p class="mb-2">Pour utiliser cette application, vous devez configurer votre clé API Mistral.</p>
+                    <a href="{{ url_for('api_config') }}" class="btn btn-warning btn-sm">Configurer la clé API</a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <ul class="nav nav-tabs card-header-tabs" id="inputTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="file-tab" data-bs-toggle="tab" data-bs-target="#file-content" type="button" role="tab" aria-controls="file-content" aria-selected="true">
+                            <i class="fas fa-file me-2"></i>Fichier
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="url-tab" data-bs-toggle="tab" data-bs-target="#url-content" type="button" role="tab" aria-controls="url-content" aria-selected="false">
+                            <i class="fas fa-link me-2"></i>URL
+                        </button>
+                    </li>
+                </ul>
+            </div>
+            <div class="card-body">
+                <div class="tab-content" id="inputTabsContent">
+                    <div class="tab-pane fade show active" id="file-content" role="tabpanel" aria-labelledby="file-tab">
+                        <form id="upload-form" enctype="multipart/form-data">
+                            <div class="drop-zone" id="drop-zone">
+                                <div class="drop-zone-prompt">
+                                    <i class="fas fa-cloud-upload-alt fa-3x mb-3"></i>
+                                    <p>Glissez-déposez votre fichier ici ou cliquez pour parcourir</p>
+                                    <p class="text-muted small">Formats acceptés: PDF, JPG, JPEG, PNG, GIF (max 50 MB)</p>
+                                </div>
+                                <input type="file" name="file" class="drop-zone-input" id="file-input" accept=".pdf,.jpg,.jpeg,.png,.gif">
+                            </div>
+                            
+                            <div class="format-options mt-3">
+                                <label class="w-100 mb-2">Formats de sortie:</label>
+                                <div class="format-option">
+                                    <input type="checkbox" name="output_formats" value="json" id="format-json" checked>
+                                    <label for="format-json">JSON</label>
+                                </div>
+                                <div class="format-option">
+                                    <input type="checkbox" name="output_formats" value="md" id="format-md" checked>
+                                    <label for="format-md">Markdown</label>
+                                </div>
+                                <div class="format-option">
+                                    <input type="checkbox" name="output_formats" value="html" id="format-html" checked>
+                                    <label for="format-html">HTML</label>
+                                </div>
+                                {% if pdf_available %}
+                                <div class="format-option">
+                                    <input type="checkbox" name="output_formats" value="pdf" id="format-pdf" checked>
+                                    <label for="format-pdf">PDF</label>
+                                </div>
+                                {% else %}
+                                <div class="format-option disabled" title="WeasyPrint n'est pas installé. Le format PDF n'est pas disponible.">
+                                    <input type="checkbox" name="output_formats" value="pdf" id="format-pdf" disabled>
+                                    <label for="format-pdf">PDF (non disponible)</label>
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="d-grid gap-2 mt-3">
+                                <button type="submit" class="btn btn-primary" id="upload-button" disabled>
+                                    <i class="fas fa-cog me-2"></i>Traiter le document
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="tab-pane fade" id="url-content" role="tabpanel" aria-labelledby="url-tab">
+                        <form id="url-form">
+                            <div class="mb-3">
+                                <label for="document-url" class="form-label">URL du document</label>
+                                <input type="url" class="form-control url-input" id="document-url" name="url" placeholder="https://exemple.com/document.pdf" required>
+                                <div class="form-text">Entrez l'URL d'un document PDF ou d'une image accessible publiquement.</div>
+                            </div>
+                            
+                            <div class="format-options mt-3">
+                                <label class="w-100 mb-2">Formats de sortie:</label>
+                                <div class="format-option">
+                                    <input type="checkbox" name="output_formats" value="json" id="url-format-json" checked>
+                                    <label for="url-format-json">JSON</label>
+                                </div>
+                                <div class="format-option">
+                                    <input type="checkbox" name="output_formats" value="md" id="url-format-md" checked>
+                                    <label for="url-format-md">Markdown</label>
+                                </div>
+                                <div class="format-option">
+                                    <input type="checkbox" name="output_formats" value="html" id="url-format-html" checked>
+                                    <label for="url-format-html">HTML</label>
+                                </div>
+                                {% if pdf_available %}
+                                <div class="format-option">
+                                    <input type="checkbox" name="output_formats" value="pdf" id="url-format-pdf" checked>
+                                    <label for="url-format-pdf">PDF</label>
+                                </div>
+                                {% else %}
+                                <div class="format-option disabled" title="WeasyPrint n'est pas installé. Le format PDF n'est pas disponible.">
+                                    <input type="checkbox" name="output_formats" value="pdf" id="url-format-pdf" disabled>
+                                    <label for="url-format-pdf">PDF (non disponible)</label>
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="d-grid gap-2 mt-3">
+                                <button type="submit" class="btn btn-primary" id="url-button">
+                                    <i class="fas fa-cog me-2"></i>Traiter l'URL
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card result-card" id="progress-card">
+            <div class="card-header">
+                <i class="fas fa-spinner fa-spin me-2"></i>Traitement en cours
+            </div>
+            <div class="card-body">
+                <p>Extraction du texte avec l'IA Mistral. Veuillez patienter...</p>
+                <div class="progress">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" id="progress-bar"></div>
+                </div>
+                <p class="text-muted mt-2 small">Cette opération peut prendre quelques minutes selon la taille et la complexité du document.</p>
+            </div>
+        </div>
+
+        <div class="card result-card" id="result-card">
+            <div class="card-header">
+                <i class="fas fa-check-circle me-2"></i>Résultats
+            </div>
+            <div class="card-body">
+                <h5 class="card-title">Extraction terminée avec succès!</h5>
+                <p class="card-text">Le texte a été extrait avec succès. Vous pouvez maintenant télécharger ou visualiser les résultats dans les formats disponibles.</p>
+                
+                <div class="mt-3" id="result-formats">
+                    <!-- Les formats seront ajoutés dynamiquement ici -->
+                </div>
+            </div>
+        </div>
+
+        <div class="card result-card" id="error-card">
+            <div class="card-header bg-danger text-white">
+                <i class="fas fa-exclamation-circle me-2"></i>Erreur
+            </div>
+            <div class="card-body">
+                <h5 class="card-title">Une erreur s'est produite</h5>
+                <p class="card-text" id="error-message">Impossible de traiter le document. Veuillez réessayer.</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>À propos de Mistral OCR</h5>
+                    <p>Mistral OCR est un outil d'extraction de texte basé sur l'IA Mistral. Il permet d'extraire du texte à partir de documents PDF et d'images avec une grande précision.</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p>Propulsé par <a href="https://mistral.ai" target="_blank">Mistral AI</a></p>
+                    <p class="text-muted">© 2024 Mistral OCR</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Éléments du DOM
+            const dropZone = document.getElementById('drop-zone');
+            const fileInput = document.getElementById('file-input');
+            const uploadForm = document.getElementById('upload-form');
+            const urlForm = document.getElementById('url-form');
+            const uploadButton = document.getElementById('upload-button');
+            const progressCard = document.getElementById('progress-card');
+            const resultCard = document.getElementById('result-card');
+            const errorCard = document.getElementById('error-card');
+            const progressBar = document.getElementById('progress-bar');
+            const resultFormats = document.getElementById('result-formats');
+            const errorMessage = document.getElementById('error-message');
+            
+            // Variables globales
+            let currentTaskId = null;
+            let pollingInterval = null;
+            
+            // Gestion du glisser-déposer
+            ['dragover', 'dragenter'].forEach(eventName => {
+                dropZone.addEventListener(eventName, e => {
+                    e.preventDefault();
+                    dropZone.classList.add('dragover');
+                });
+            });
+            
+            ['dragleave', 'dragend', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, e => {
+                    e.preventDefault();
+                    dropZone.classList.remove('dragover');
+                });
+            });
+            
+            dropZone.addEventListener('drop', e => {
+                e.preventDefault();
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    updateFileInfo(fileInput.files[0]);
+                }
+            });
+            
+            dropZone.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            fileInput.addEventListener('change', () => {
+                if (fileInput.files.length) {
+                    updateFileInfo(fileInput.files[0]);
+                }
+            });
+            
+            function updateFileInfo(file) {
+                const prompt = dropZone.querySelector('.drop-zone-prompt');
+                
+                // Vérifier si le type de fichier est autorisé
+                const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+                if (!allowedTypes.includes(file.type)) {
+                    prompt.innerHTML = `
+                        <i class="fas fa-exclamation-triangle fa-3x mb-3 text-danger"></i>
+                        <p class="text-danger">Type de fichier non supporté: ${file.type}</p>
+                        <p class="text-muted small">Formats acceptés: PDF, JPG, JPEG, PNG, GIF</p>
+                        <button class="btn btn-outline-secondary btn-sm mt-2">Choisir un autre fichier</button>
+                    `;
+                    uploadButton.disabled = true;
+                    return;
+                }
+                
+                // Vérifier la taille du fichier (max 50 MB)
+                if (file.size > 50 * 1024 * 1024) {
+                    prompt.innerHTML = `
+                        <i class="fas fa-exclamation-triangle fa-3x mb-3 text-danger"></i>
+                        <p class="text-danger">Fichier trop volumineux: ${(file.size / (1024 * 1024)).toFixed(2)} MB</p>
+                        <p class="text-muted small">Taille maximale: 50 MB</p>
+                        <button class="btn btn-outline-secondary btn-sm mt-2">Choisir un autre fichier</button>
+                    `;
+                    uploadButton.disabled = true;
+                    return;
+                }
+                
+                // Afficher les informations du fichier
+                let fileIcon = 'fa-file';
+                if (file.type === 'application/pdf') {
+                    fileIcon = 'fa-file-pdf';
+                } else if (file.type.startsWith('image/')) {
+                    fileIcon = 'fa-file-image';
+                }
+                
+                prompt.innerHTML = `
+                    <i class="fas ${fileIcon} fa-3x mb-3 text-primary"></i>
+                    <p class="fw-bold">${file.name}</p>
+                    <p class="text-muted small">${(file.size / 1024).toFixed(2)} KB</p>
+                    <button class="btn btn-outline-secondary btn-sm mt-2">Changer de fichier</button>
+                `;
+                
+                uploadButton.disabled = false;
+            }
+            
+            // Soumission du formulaire de fichier
+            uploadForm.addEventListener('submit', e => {
+                e.preventDefault();
+                
+                if (!fileInput.files.length) {
+                    return;
+                }
+                
+                const formData = new FormData(uploadForm);
+                
+                // Vérifier qu'au moins un format est sélectionné
+                const selectedFormats = formData.getAll('output_formats');
+                if (selectedFormats.length === 0) {
+                    alert('Veuillez sélectionner au moins un format de sortie.');
+                    return;
+                }
+                
+                // Cacher les cartes de résultat précédentes
+                hideResultCards();
+                
+                // Afficher la carte de progression
+                progressCard.style.display = 'block';
+                progressBar.style.width = '0%';
+                
+                // Envoyer la requête
+                fetch('/process-file', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'error') {
+                        showError(data.message);
+                    } else if (data.status === 'processing') {
+                        currentTaskId = data.task_id;
+                        startPolling(currentTaskId);
+                    }
+                })
+                .catch(error => {
+                    showError('Erreur lors de la communication avec le serveur: ' + error.message);
+                });
+            });
+            
+            // Soumission du formulaire d'URL
+            urlForm.addEventListener('submit', e => {
+                e.preventDefault();
+                
+                const formData = new FormData(urlForm);
+                
+                // Vérifier qu'au moins un format est sélectionné
+                const selectedFormats = formData.getAll('output_formats');
+                if (selectedFormats.length === 0) {
+                    alert('Veuillez sélectionner au moins un format de sortie.');
+                    return;
+                }
+                
+                // Cacher les cartes de résultat précédentes
+                hideResultCards();
+                
+                // Afficher la carte de progression
+                progressCard.style.display = 'block';
+                progressBar.style.width = '0%';
+                
+                // Envoyer la requête
+                fetch('/process-url', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'error') {
+                        showError(data.message);
+                    } else if (data.status === 'processing') {
+                        currentTaskId = data.task_id;
+                        startPolling(currentTaskId);
+                    }
+                })
+                .catch(error => {
+                    showError('Erreur lors de la communication avec le serveur: ' + error.message);
+                });
+            });
+            
+            // Fonction pour démarrer le polling
+            function startPolling(taskId) {
+                if (pollingInterval) {
+                    clearInterval(pollingInterval);
+                }
+                
+                pollingInterval = setInterval(() => {
+                    fetch(`/task-status/${taskId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'error') {
+                                clearInterval(pollingInterval);
+                                showError(data.error || 'Une erreur s\'est produite lors du traitement.');
+                            } else if (data.status === 'completed') {
+                                clearInterval(pollingInterval);
+                                showResults(data.result_urls);
+                            } else if (data.status === 'processing') {
+                                progressBar.style.width = `${data.progress}%`;
+                            }
+                        })
+                        .catch(error => {
+                            clearInterval(pollingInterval);
+                            showError('Erreur lors de la communication avec le serveur: ' + error.message);
+                        });
+                }, 1000);
+            }
+            
+            // Fonction pour afficher les résultats
+            function showResults(resultUrls) {
+                hideResultCards();
+                resultCard.style.display = 'block';
+                
+                // Vider les formats précédents
+                resultFormats.innerHTML = '';
+                
+                // Ajouter les formats disponibles
+                for (const [format, url] of Object.entries(resultUrls)) {
+                    const formatDiv = document.createElement('div');
+                    formatDiv.className = 'mb-3';
+                    
+                    const formatBadge = document.createElement('span');
+                    formatBadge.className = `format-badge ${format}`;
+                    formatBadge.textContent = format.toUpperCase();
+                    
+                    const actionsDiv = document.createElement('div');
+                    actionsDiv.className = 'result-actions mt-2';
+                    
+                    // Bouton de téléchargement
+                    const downloadBtn = document.createElement('a');
+                    downloadBtn.href = url;
+                    downloadBtn.className = 'btn btn-outline-primary btn-sm';
+                    downloadBtn.innerHTML = '<i class="fas fa-download me-1"></i> Télécharger';
+                    downloadBtn.setAttribute('download', '');
+                    
+                    // Bouton de visualisation (seulement pour HTML)
+                    if (format === 'html') {
+                        const viewBtn = document.createElement('a');
+                        viewBtn.href = url.replace('/download-result/', '/view-result/');
+                        viewBtn.className = 'btn btn-outline-secondary btn-sm';
+                        viewBtn.innerHTML = '<i class="fas fa-eye me-1"></i> Visualiser';
+                        viewBtn.setAttribute('target', '_blank');
+                        actionsDiv.appendChild(viewBtn);
+                    }
+                    
+                    actionsDiv.appendChild(downloadBtn);
+                    
+                    formatDiv.appendChild(formatBadge);
+                    formatDiv.appendChild(document.createTextNode(' '));
+                    formatDiv.appendChild(document.createTextNode(`Résultat au format ${format.toUpperCase()}`));
+                    formatDiv.appendChild(actionsDiv);
+                    
+                    resultFormats.appendChild(formatDiv);
+                }
+            }
+            
+            // Fonction pour afficher une erreur
+            function showError(message) {
+                hideResultCards();
+                errorCard.style.display = 'block';
+                errorMessage.textContent = message;
+            }
+            
+            // Fonction pour cacher toutes les cartes de résultat
+            function hideResultCards() {
+                progressCard.style.display = 'none';
+                resultCard.style.display = 'none';
+                errorCard.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
