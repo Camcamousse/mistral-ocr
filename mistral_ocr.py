@@ -19,28 +19,51 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import de la librairie Mistral officielle
-from mistralai import Mistral
+try:
+    from mistralai import Mistral
+except ImportError:
+    print("La librairie mistralai n'est pas installée.")
+    print("Installez-la avec: pip install mistralai")
+    sys.exit(1)
 
 # Imports pour la conversion Markdown vers HTML
-import markdown2
-import re
-import shutil
-import uuid
-import time
-
-# Importer WeasyPrint pour la conversion HTML vers PDF
 try:
-    # Désactiver WeasyPrint par défaut pour éviter les problèmes de dépendances
-    # from weasyprint import HTML
-    # Définir une variable pour indiquer que la fonctionnalité PDF est disponible
-    PDF_AVAILABLE = False
-    print("WeasyPrint est désactivé par défaut. Pour l'activer, décommentez la ligne d'import dans mistral_ocr.py")
+    import markdown2
+    import re
+    import shutil
+    import uuid
+    import time
 except ImportError:
-    # Si WeasyPrint n'est pas installé, désactiver la fonctionnalité PDF
+    print("Des dépendances nécessaires sont manquantes.")
+    print("Installez toutes les dépendances avec: pip install -r requirements.txt")
+    sys.exit(1)
+
+# Importer WeasyPrint pour la conversion HTML vers PDF (DÉSACTIVÉ PAR DÉFAUT)
+# Cette fonctionnalité est optionnelle et nécessite des dépendances système supplémentaires
+PDF_AVAILABLE = False
+try:
+    # Pour activer WeasyPrint, décommentez la ligne ci-dessous
+    # from weasyprint import HTML
+    # Et changez PDF_AVAILABLE à True
+    # PDF_AVAILABLE = True
+    
+    if not PDF_AVAILABLE:
+        print("\n=== INFO: Génération PDF désactivée ===")
+        print("Pour activer la génération PDF sur macOS:")
+        print("1. Installez les dépendances système: brew install cairo pango gdk-pixbuf libffi")
+        print("2. Installez WeasyPrint: pip install weasyprint==52.5")
+        print("3. Modifiez ce fichier pour décommenter 'from weasyprint import HTML'")
+        print("4. Changez PDF_AVAILABLE à True")
+        print("================================\n")
+except Exception as e:
     PDF_AVAILABLE = False
-    print("WeasyPrint n'est pas installé. L'exportation PDF ne sera pas disponible.")
-    print("Pour l'installer sur macOS: brew install cairo pango gdk-pixbuf libffi")
-    print("Puis: pip install weasyprint==52.5")
+    print(f"\n=== ERREUR: Impossible d'importer WeasyPrint ===")
+    print(f"Erreur: {str(e)}")
+    print("La génération de PDF ne sera pas disponible.")
+    print("Pour l'installer sur macOS:")
+    print("1. Installez les dépendances système: brew install cairo pango gdk-pixbuf libffi")
+    print("2. Installez WeasyPrint: pip install weasyprint==52.5")
+    print("================================\n")
 
 
 class MistralOCR:
@@ -53,7 +76,22 @@ class MistralOCR:
         Args:
             api_key: Clé API Mistral
         """
-        self.client = Mistral(api_key=api_key)
+        try:
+            self.client = Mistral(api_key=api_key)
+            # Tester immédiatement si la clé fonctionne
+            models = self.client.list_models()
+            print(f"Client Mistral initialisé avec succès. {len(models.data) if hasattr(models, 'data') else 0} modèles disponibles.")
+            self.is_valid = True
+        except Exception as e:
+            error_msg = str(e)
+            if "401" in error_msg or "Unauthorized" in error_msg:
+                print(f"ERREUR: Clé API invalide ou non autorisée: {error_msg}")
+            else:
+                print(f"ERREUR lors de l'initialisation du client Mistral: {error_msg}")
+            self.is_valid = False
+            # On crée quand même le client pour permettre d'autres opérations
+            self.client = Mistral(api_key=api_key)
+            
         self.model = "mistral-ocr-latest"
 
     def process_document_url(self, url: str, include_images: bool = True) -> Dict[str, Any]:
@@ -68,6 +106,10 @@ class MistralOCR:
             Résultat de l'OCR
         """
         try:
+            # Vérifier si le client est valide
+            if not getattr(self, 'is_valid', True):
+                return {"error": "Clé API Mistral invalide ou non autorisée. Veuillez vérifier votre clé API ou en créer une nouvelle sur https://console.mistral.ai/api-keys/"}
+            
             # Utilisation de l'API OCR Mistral officielle
             response = self.client.ocr.process(
                 model=self.model,
@@ -82,8 +124,13 @@ class MistralOCR:
             response_dict = response.model_dump()
             return response_dict
         except Exception as e:
-            print(f"Erreur lors du traitement de l'URL: {str(e)}")
-            return {"error": str(e)}
+            error_msg = str(e)
+            if "401" in error_msg or "Unauthorized" in error_msg:
+                print(f"Erreur d'authentification lors du traitement de l'URL: {error_msg}")
+                return {"error": "Clé API Mistral invalide ou non autorisée. Veuillez vérifier votre clé API ou en créer une nouvelle."}
+            else:
+                print(f"Erreur lors du traitement de l'URL: {error_msg}")
+                return {"error": str(e)}
 
     def process_pdf_file(self, file_path: str, include_images: bool = True) -> Dict[str, Any]:
         """
@@ -97,6 +144,10 @@ class MistralOCR:
             Résultat de l'OCR
         """
         try:
+            # Vérifier si le client est valide
+            if not getattr(self, 'is_valid', True):
+                return {"error": "Clé API Mistral invalide ou non autorisée. Veuillez vérifier votre clé API ou en créer une nouvelle sur https://console.mistral.ai/api-keys/"}
+            
             # Upload the PDF file
             with open(file_path, "rb") as f:
                 uploaded_file = self.client.files.upload(
@@ -124,8 +175,13 @@ class MistralOCR:
             response_dict = response.model_dump()
             return response_dict
         except Exception as e:
-            print(f"Erreur lors du traitement du PDF: {str(e)}")
-            return {"error": str(e)}
+            error_msg = str(e)
+            if "401" in error_msg or "Unauthorized" in error_msg:
+                print(f"Erreur d'authentification lors du traitement du PDF: {error_msg}")
+                return {"error": "Clé API Mistral invalide ou non autorisée. Veuillez vérifier votre clé API ou en créer une nouvelle."}
+            else:
+                print(f"Erreur lors du traitement du PDF: {error_msg}")
+                return {"error": str(e)}
 
     def process_image_file(self, file_path: str, include_images: bool = False) -> Dict[str, Any]:
         """
@@ -139,6 +195,10 @@ class MistralOCR:
             Résultat de l'OCR
         """
         try:
+            # Vérifier si le client est valide
+            if not getattr(self, 'is_valid', True):
+                return {"error": "Clé API Mistral invalide ou non autorisée. Veuillez vérifier votre clé API ou en créer une nouvelle sur https://console.mistral.ai/api-keys/"}
+            
             # Lecture et encodage de l'image en base64
             with open(file_path, "rb") as image_file:
                 base64_image = base64.b64encode(image_file.read()).decode('utf-8')
@@ -170,8 +230,13 @@ class MistralOCR:
             response_dict = response.model_dump()
             return response_dict
         except Exception as e:
-            print(f"Erreur lors du traitement de l'image: {str(e)}")
-            return {"error": str(e)}
+            error_msg = str(e)
+            if "401" in error_msg or "Unauthorized" in error_msg:
+                print(f"Erreur d'authentification lors du traitement de l'image: {error_msg}")
+                return {"error": "Clé API Mistral invalide ou non autorisée. Veuillez vérifier votre clé API ou en créer une nouvelle."}
+            else:
+                print(f"Erreur lors du traitement de l'image: {error_msg}")
+                return {"error": str(e)}
 
     def ask_question_about_document(self, document_url: str, question: str, model: str = "mistral-small-latest") -> str:
         """
@@ -241,27 +306,6 @@ class MistralOCR:
             
             # Générer un fichier HTML avec un meilleur rendu
             self.generate_html_output(result, output_file.replace(".json", ".html"))
-            
-            # Générer un fichier PDF si WeasyPrint est disponible
-            if PDF_AVAILABLE:
-                html_file = output_file.replace(".json", ".html")
-                pdf_file = output_file.replace(".json", ".pdf")
-                
-                # S'assurer que le fichier HTML existe
-                if os.path.exists(html_file):
-                    try:
-                        # Générer le PDF à partir du HTML
-                        from weasyprint import HTML
-                        HTML(filename=html_file).write_pdf(pdf_file)
-                        print(f"PDF généré avec succès: {pdf_file}")
-                    except Exception as e:
-                        print(f"Erreur lors de la génération du PDF: {str(e)}")
-                else:
-                    print(f"Le fichier HTML {html_file} n'existe pas, impossible de générer le PDF")
-            else:
-                print("WeasyPrint n'est pas installé. L'exportation PDF n'est pas disponible.")
-                print("Pour l'installer sur macOS: brew install cairo pango gdk-pixbuf libffi")
-                print("Puis: pip install weasyprint==52.5")
         except Exception as e:
             print(f"Erreur lors de la sauvegarde du résultat: {str(e)}")
     
@@ -274,10 +318,10 @@ class MistralOCR:
             output_html_file: Chemin du fichier HTML de sortie
         """
         try:
-            # Créer un dossier pour les ressources si nécessaire
+            # Créer un dossier pour les images si nécessaire
             output_dir = os.path.dirname(output_html_file)
-            if output_dir and not os.path.exists(output_dir):
-                os.makedirs(output_dir)
+            images_dir = os.path.join(output_dir, "images_" + str(uuid.uuid4())[:8])
+            os.makedirs(images_dir, exist_ok=True)
             
             # Préparer le contenu HTML
             html_content = """<!DOCTYPE html>
@@ -285,135 +329,127 @@ class MistralOCR:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Résultat OCR</title>
+    <title>Résultat OCR Mistral</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
             color: #333;
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
+            background-color: #f9f9f9;
         }
-        h1 {
+        .page {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            margin-bottom: 30px;
+            position: relative;
+        }
+        .page-number {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #007bff;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 14px;
+        }
+        h1, h2, h3, h4, h5, h6 {
             color: #2c3e50;
-            border-bottom: 2px solid #3498db;
-            padding-bottom: 10px;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
         }
-        h2 {
-            color: #2980b9;
-            margin-top: 30px;
-        }
-        h3 {
-            color: #3498db;
-        }
+        h1 { font-size: 2.2em; }
+        h2 { font-size: 1.8em; }
+        h3 { font-size: 1.5em; }
+        h4 { font-size: 1.3em; }
+        h5 { font-size: 1.1em; }
+        h6 { font-size: 1em; }
         img {
             max-width: 100%;
             height: auto;
-            border: 1px solid #ddd;
             border-radius: 4px;
-            padding: 5px;
-            margin: 10px 0;
+            margin: 15px 0;
         }
         pre {
-            background-color: #f8f9fa;
-            border: 1px solid #ddd;
+            background-color: #f8f8f8;
+            border-left: 4px solid #007bff;
+            padding: 15px;
             border-radius: 4px;
-            padding: 10px;
             overflow-x: auto;
         }
         code {
-            font-family: Consolas, Monaco, 'Andale Mono', monospace;
-            background-color: #f8f9fa;
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #f0f0f0;
             padding: 2px 4px;
             border-radius: 3px;
+        }
+        blockquote {
+            border-left: 4px solid #ccc;
+            padding-left: 15px;
+            color: #666;
+            margin: 15px 0;
         }
         table {
             border-collapse: collapse;
             width: 100%;
             margin: 15px 0;
+            overflow-x: auto;
+            display: block;
         }
         th, td {
             border: 1px solid #ddd;
-            padding: 8px;
+            padding: 8px 12px;
             text-align: left;
         }
         th {
             background-color: #f2f2f2;
-        }
-        .page-container {
-            margin-bottom: 40px;
-            border: 1px solid #eee;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .page-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        .page-number {
             font-weight: bold;
-            color: #7f8c8d;
         }
-        .metadata {
-            background-color: #f8f9fa;
-            border-left: 3px solid #3498db;
-            padding: 10px 15px;
-            margin: 20px 0;
-            font-size: 0.9em;
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
         }
-        .metadata p {
-            margin: 5px 0;
-        }
-        .image-container {
+        .header {
             text-align: center;
-            margin: 20px 0;
+            margin-bottom: 30px;
         }
         .footer {
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
             text-align: center;
-            font-size: 0.8em;
-            color: #7f8c8d;
+            margin-top: 30px;
+            color: #666;
+            font-size: 0.9em;
         }
-        /* Styles pour les tableaux dans le markdown */
-        .markdown-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 15px 0;
-        }
-        .markdown-table th, .markdown-table td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        .markdown-table th {
-            background-color: #f2f2f2;
-        }
-        /* Styles pour les formules mathématiques */
         .math {
-            font-family: 'Times New Roman', serif;
+            font-family: 'Cambria Math', 'STIX', serif;
             font-style: italic;
         }
+        @media print {
+            body {
+                background-color: white;
+            }
+            .page {
+                box-shadow: none;
+                margin-bottom: 0;
+                page-break-after: always;
+            }
+        }
     </style>
+    <script type="text/javascript" async
+        src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-MML-AM_CHTML">
+    </script>
 </head>
 <body>
-    <h1>Résultat de la reconnaissance de texte (OCR)</h1>
-    
-    <div class="metadata">
-        <p><strong>Document traité le:</strong> """ + time.strftime("%d/%m/%Y à %H:%M:%S") + """</p>
-        <p><strong>Nombre de pages:</strong> """ + str(len(result.get("pages", []))) + """</p>
-        <p><strong>Modèle utilisé:</strong> """ + result.get("model", "Non spécifié") + """</p>
+    <div class="header">
+        <h1>Document OCR par Mistral AI</h1>
+        <p>Traitement effectué le """ + time.strftime("%d/%m/%Y à %H:%M:%S") + """</p>
     </div>
-    
-    <div id="content">
 """
             
-            # Ajouter chaque page
+            # Traiter chaque page
             for page in result.get("pages", []):
                 page_index = page.get("index", 0)
                 page_markdown = page.get("markdown", "")
@@ -421,26 +457,53 @@ class MistralOCR:
                 # Améliorer le formatage des tableaux et des expressions mathématiques
                 page_markdown = self._enhance_tables_and_math(page_markdown)
                 
-                # Convertir le markdown en HTML
-                page_html = markdown2.markdown(page_markdown, extras=["tables", "fenced-code-blocks"])
+                # Extraire et sauvegarder les images
+                for i, img in enumerate(page.get("images", [])):
+                    if "base64" in img:
+                        # Extraire l'image en base64
+                        img_data = img["base64"]
+                        img_format = "jpeg"  # Format par défaut
+                        
+                        # Déterminer le format de l'image
+                        if img_data.startswith("data:image/"):
+                            mime_type = img_data.split(";")[0].split(":")[1]
+                            img_format = mime_type.split("/")[1]
+                            img_data = img_data.split(",")[1]
+                        
+                        # Sauvegarder l'image
+                        img_filename = f"page_{page_index}_img_{i}.{img_format}"
+                        img_path = os.path.join(images_dir, img_filename)
+                        
+                        try:
+                            with open(img_path, "wb") as img_file:
+                                img_file.write(base64.b64decode(img_data))
+                            
+                            # Remplacer la référence dans le markdown
+                            img_tag = f"![img-{i}.{img_format}](img-{i}.{img_format})"
+                            relative_img_path = os.path.join(os.path.basename(images_dir), img_filename)
+                            page_markdown = page_markdown.replace(img_tag, f"![Image {i}]({relative_img_path})")
+                        except Exception as e:
+                            print(f"Erreur lors de l'extraction de l'image {i} de la page {page_index}: {str(e)}")
                 
+                # Convertir le markdown en HTML
+                html_page_content = markdown2.markdown(
+                    page_markdown,
+                    extras=[
+                        "tables", "fenced-code-blocks", "footnotes",
+                        "header-ids", "strike", "task_list"
+                    ]
+                )
+                
+                # Ajouter la page au document HTML
                 html_content += f"""
-    <div class="page-container" id="page-{page_index}">
-        <div class="page-header">
-            <h2>Page {page_index}</h2>
-            <span class="page-number">{page_index}/{len(result.get("pages", []))}</span>
-        </div>
-        
-        <div class="page-content">
-            {page_html}
-        </div>
+    <div class="page">
+        <div class="page-number">Page {page_index}</div>
+        {html_page_content}
     </div>
 """
             
-            # Fermer le HTML
+            # Finaliser le document HTML
             html_content += """
-    </div>
-    
     <div class="footer">
         <p>Document généré par Mistral OCR</p>
     </div>
@@ -452,113 +515,311 @@ class MistralOCR:
             with open(output_html_file, "w", encoding="utf-8") as f:
                 f.write(html_content)
             
-            print(f"Fichier HTML généré avec succès: {output_html_file}")
-            
+            print(f"Rendu HTML amélioré sauvegardé dans {output_html_file}")
         except Exception as e:
             print(f"Erreur lors de la génération du fichier HTML: {str(e)}")
     
-    def _enhance_tables_and_math(self, markdown_text: str) -> str:
+    def _enhance_tables_and_math(self, markdown_content: str) -> str:
         """
-        Améliore le formatage des tableaux et des expressions mathématiques dans le markdown.
+        Améliore le formatage des tableaux et des expressions mathématiques dans le contenu Markdown.
         
         Args:
-            markdown_text: Texte markdown à améliorer
+            markdown_content: Contenu Markdown à améliorer
             
         Returns:
-            Texte markdown amélioré
+            Contenu Markdown amélioré
         """
-        # Améliorer les tableaux
-        # Rechercher les lignes qui ressemblent à des tableaux (contenant plusieurs |)
-        lines = markdown_text.split('\n')
-        in_table = False
-        table_start_index = -1
+        # Amélioration des tableaux
+        markdown_content = self._enhance_tables(markdown_content)
         
-        for i, line in enumerate(lines):
-            pipe_count = line.count('|')
+        # Amélioration des expressions mathématiques
+        markdown_content = self._enhance_math_expressions(markdown_content)
+        
+        return markdown_content
+    
+    def _enhance_tables(self, markdown_content: str) -> str:
+        """
+        Améliore le formatage des tableaux dans le contenu Markdown.
+        
+        Args:
+            markdown_content: Contenu Markdown à améliorer
             
-            # Si la ligne contient au moins 3 pipes et n'est pas déjà dans un tableau formaté
-            if pipe_count >= 3 and not in_table and not line.strip().startswith('|'):
-                in_table = True
-                table_start_index = i
-                # Formater cette ligne comme début de tableau
-                lines[i] = '|' + line.replace('|', '|').strip() + '|'
+        Returns:
+            Contenu Markdown avec des tableaux améliorés
+        """
+        # Recherche des tableaux dans le contenu Markdown
+        table_pattern = r'(\|[^\n]+\|\n\|[-:| ]+\|\n(?:\|[^\n]+\|\n)+)'
+        
+        def format_table(match):
+            table_content = match.group(1)
             
-            # Si nous sommes dans un tableau et la ligne continue le motif
-            elif in_table and pipe_count >= 3:
-                # Formater cette ligne comme continuation de tableau
-                lines[i] = '|' + line.replace('|', '|').strip() + '|'
+            # Diviser le tableau en lignes
+            lines = table_content.strip().split('\n')
+            
+            # S'assurer que toutes les lignes ont le même nombre de colonnes
+            if len(lines) >= 2:
+                header_line = lines[0]
+                separator_line = lines[1]
                 
-                # Si c'est la deuxième ligne du tableau, ajouter une ligne de séparation
-                if i == table_start_index + 1:
-                    # Compter le nombre de colonnes
-                    columns = lines[i].count('|') - 1
-                    separator_line = '|' + '---|' * columns
-                    # Insérer la ligne de séparation
-                    lines.insert(i, separator_line)
-                    i += 1  # Ajuster l'index après l'insertion
+                # Compter le nombre de colonnes dans l'en-tête
+                header_columns = header_line.count('|') - 1
+                
+                # Formater la ligne de séparation pour qu'elle ait le bon nombre de colonnes
+                separator_parts = separator_line.split('|')
+                separator_parts = [p for p in separator_parts if p]  # Supprimer les éléments vides
+                
+                # Créer une nouvelle ligne de séparation avec le bon nombre de colonnes
+                new_separator = '|'
+                for _ in range(header_columns):
+                    new_separator += ' --- |'
+                
+                lines[1] = new_separator
+                
+                # Formater les lignes de données pour qu'elles aient le bon nombre de colonnes
+                for i in range(2, len(lines)):
+                    data_line = lines[i]
+                    data_columns = data_line.count('|') - 1
+                    
+                    # Si la ligne a trop peu de colonnes, ajouter des colonnes vides
+                    if data_columns < header_columns:
+                        missing_columns = header_columns - data_columns
+                        lines[i] = data_line.rstrip('|\n') + '|' + ' |' * missing_columns
+                    
+                    # Si la ligne a trop de colonnes, supprimer les colonnes excédentaires
+                    elif data_columns > header_columns:
+                        parts = data_line.split('|')
+                        lines[i] = '|'.join(parts[:header_columns+2]) + '|'  # +2 pour inclure les éléments vides au début et à la fin
             
-            # Si nous étions dans un tableau mais la ligne ne correspond plus au motif
-            elif in_table and pipe_count < 3:
-                in_table = False
-                table_start_index = -1
+            # Reconstruire le tableau
+            return '\n'.join(lines) + '\n'
         
-        # Améliorer les expressions mathématiques
-        # Rechercher les motifs qui ressemblent à des formules mathématiques
-        enhanced_text = '\n'.join(lines)
+        # Remplacer les tableaux par leur version améliorée
+        enhanced_content = re.sub(table_pattern, format_table, markdown_content, flags=re.DOTALL)
         
-        # Remplacer les expressions entre $$ par des balises <div class="math">
-        enhanced_text = re.sub(r'\$\$(.*?)\$\$', r'<div class="math">\1</div>', enhanced_text)
+        return enhanced_content
+    
+    def _enhance_math_expressions(self, markdown_content: str) -> str:
+        """
+        Améliore le formatage des expressions mathématiques dans le contenu Markdown.
         
-        # Remplacer les expressions entre $ par des balises <span class="math">
-        enhanced_text = re.sub(r'\$(.*?)\$', r'<span class="math">\1</span>', enhanced_text)
+        Args:
+            markdown_content: Contenu Markdown à améliorer
+            
+        Returns:
+            Contenu Markdown avec des expressions mathématiques améliorées
+        """
+        # Fonction pour nettoyer les expressions mathématiques
+        def clean_math_expr(expr):
+            # Supprimer les espaces inutiles
+            expr = expr.strip()
+            
+            # Corriger les problèmes courants dans les expressions LaTeX
+            replacements = {
+                # Fractions
+                r'\\frac\s+([^ {}]+)\s+([^ {}]+)': r'\\frac{\1}{\2}',
+                r'\\frac\s*{([^}]*)}\s*{([^}]*)}': r'\\frac{\1}{\2}',
+                
+                # Indices et exposants
+                r'_([a-zA-Z0-9])([^a-zA-Z0-9])': r'_{\1}\2',
+                r'\^([a-zA-Z0-9])([^a-zA-Z0-9])': r'^{\1}\2',
+                
+                # Opérateurs avec limites
+                r'\\sum\s*_([^ {}]+)': r'\\sum_{\1}',
+                r'\\prod\s*_([^ {}]+)': r'\\prod_{\1}',
+                r'\\int\s*_([^ {}]+)': r'\\int_{\1}',
+                r'\\lim\s*_([^ {}]+)': r'\\lim_{\1}',
+                
+                # Espaces dans les commandes
+                r'\\([a-zA-Z]+)\s+': r'\\\1 ',
+                
+                # Accolades manquantes
+                r'\\sqrt\s+([^ {}]+)': r'\\sqrt{\1}',
+                
+                # Symboles spéciaux
+                r'\\mathbb\s*{([^}]*)}': r'\\mathbb{\1}',
+                r'\\mathcal\s*{([^}]*)}': r'\\mathcal{\1}',
+                r'\\mathrm\s*{([^}]*)}': r'\\mathrm{\1}',
+                r'\\mathbf\s*{([^}]*)}': r'\\mathbf{\1}',
+                
+                # Environnements
+                r'\\begin\s*{([^}]*)}': r'\\begin{\1}',
+                r'\\end\s*{([^}]*)}': r'\\end{\1}',
+                
+                # Corriger les problèmes d'espacement
+                r'\s*\\,\s*': r'\\, ',
+                r'\s*\\;\s*': r'\\; ',
+                r'\s*\\quad\s*': r'\\quad ',
+                r'\s*\\qquad\s*': r'\\qquad ',
+                
+                # Corriger les problèmes de délimiteurs
+                r'\\left\s*([^\\])': r'\\left\1',
+                r'\\right\s*([^\\])': r'\\right\1',
+                
+                # Corriger les problèmes de matrices
+                r'\\begin\s*{matrix}': r'\\begin{matrix}',
+                r'\\end\s*{matrix}': r'\\end{matrix}',
+                r'\\begin\s*{pmatrix}': r'\\begin{pmatrix}',
+                r'\\end\s*{pmatrix}': r'\\end{pmatrix}',
+                r'\\begin\s*{bmatrix}': r'\\begin{bmatrix}',
+                r'\\end\s*{bmatrix}': r'\\end{bmatrix}',
+                
+                # Corriger les problèmes de symboles
+                r'\\infty\s': r'\\infty ',
+                r'\\alpha\s': r'\\alpha ',
+                r'\\beta\s': r'\\beta ',
+                r'\\gamma\s': r'\\gamma ',
+                r'\\delta\s': r'\\delta ',
+                r'\\epsilon\s': r'\\epsilon ',
+                r'\\zeta\s': r'\\zeta ',
+                r'\\eta\s': r'\\eta ',
+                r'\\theta\s': r'\\theta ',
+                r'\\iota\s': r'\\iota ',
+                r'\\kappa\s': r'\\kappa ',
+                r'\\lambda\s': r'\\lambda ',
+                r'\\mu\s': r'\\mu ',
+                r'\\nu\s': r'\\nu ',
+                r'\\xi\s': r'\\xi ',
+                r'\\pi\s': r'\\pi ',
+                r'\\rho\s': r'\\rho ',
+                r'\\sigma\s': r'\\sigma ',
+                r'\\tau\s': r'\\tau ',
+                r'\\upsilon\s': r'\\upsilon ',
+                r'\\phi\s': r'\\phi ',
+                r'\\chi\s': r'\\chi ',
+                r'\\psi\s': r'\\psi ',
+                r'\\omega\s': r'\\omega ',
+            }
+            
+            # Appliquer les remplacements
+            for pattern, replacement in replacements.items():
+                expr = re.sub(pattern, replacement, expr)
+            
+            return expr
         
-        return enhanced_text
+        # Remplacer les expressions mathématiques en ligne (entre $ et $)
+        def replace_inline_math(match):
+            math_expr = match.group(1)
+            cleaned_expr = clean_math_expr(math_expr)
+            return f'$${cleaned_expr}$$'
+        
+        inline_math_pattern = r'\$([^$\n]+?)\$'
+        enhanced_content = re.sub(inline_math_pattern, replace_inline_math, markdown_content)
+        
+        # Remplacer les expressions mathématiques en bloc (entre $$ et $$)
+        def replace_block_math(match):
+            math_expr = match.group(1)
+            cleaned_expr = clean_math_expr(math_expr)
+            return f'$$\n{cleaned_expr}\n$$'
+        
+        block_math_pattern = r'\$\$([^$]+?)\$\$'
+        enhanced_content = re.sub(block_math_pattern, replace_block_math, enhanced_content)
+        
+        return enhanced_content
 
 
 def main():
-    """Fonction principale du script."""
-    parser = argparse.ArgumentParser(description="Mistral OCR - Reconnaissance de texte dans des documents")
+    parser = argparse.ArgumentParser(description="Effectuer l'OCR sur des documents avec l'API Mistral")
     
-    # Options pour les sources de documents
-    source_group = parser.add_mutually_exclusive_group(required=True)
-    source_group.add_argument("--url", help="URL d'un document à traiter")
-    source_group.add_argument("--pdf", help="Chemin vers un fichier PDF local à traiter")
-    source_group.add_argument("--image", help="Chemin vers un fichier image local à traiter")
+    # Options obligatoires
+    parser.add_argument("--api-key", type=str, help="Clé API Mistral (ou définir la variable d'environnement MISTRAL_API_KEY)")
     
-    # Options générales
-    parser.add_argument("--api-key", help="Clé API Mistral (ou définir la variable d'environnement MISTRAL_API_KEY)")
-    parser.add_argument("--output", default="ocr_result", help="Nom du fichier de sortie (par défaut: ocr_result.json)")
+    # Type d'entrée (un seul requis)
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument("--url", type=str, help="URL d'un document à traiter")
+    input_group.add_argument("--pdf", type=str, help="Chemin vers un fichier PDF local à traiter")
+    input_group.add_argument("--image", type=str, help="Chemin vers un fichier image local à traiter")
+    
+    # Options additionnelles
+    parser.add_argument("--output", type=str, default="ocr_result.json", help="Nom du fichier de sortie (par défaut: ocr_result.json)")
     parser.add_argument("--no-images", action="store_true", help="Ne pas inclure les images en base64 dans le résultat")
-    parser.add_argument("--question", help="Poser une question sur le document (document understanding, URL uniquement)")
+    parser.add_argument("--question", type=str, help="Poser une question sur le document (document understanding)")
+    parser.add_argument("--format", choices=["json", "md", "html", "pdf", "all"], default="all", 
+                        help="Format de sortie: json, md (markdown), html, pdf ou all (tous les formats)")
     
     args = parser.parse_args()
     
-    # Récupérer la clé API
+    # Récupérer la clé API de l'argument ou de la variable d'environnement
     api_key = args.api_key or os.environ.get("MISTRAL_API_KEY")
     if not api_key:
-        print("Erreur: Aucune clé API Mistral fournie. Utilisez --api-key ou définissez la variable d'environnement MISTRAL_API_KEY.")
+        print("Erreur: La clé API Mistral est requise. Utilisez --api-key ou définissez la variable d'environnement MISTRAL_API_KEY.")
         sys.exit(1)
     
     # Créer l'instance MistralOCR
     ocr = MistralOCR(api_key)
     
-    # Traiter selon le type d'entrée
+    # Traiter le document selon le type d'entrée
     if args.url:
-        if args.question:
-            # Mode question sur document
-            answer = ocr.ask_question_about_document(args.url, args.question)
-            print(f"\nQuestion: {args.question}\n\nRéponse: {answer}")
-        else:
-            # Mode OCR normal
-            result = ocr.process_document_url(args.url, not args.no_images)
-            ocr.save_ocr_result(result, args.output)
+        print(f"Traitement de l'URL: {args.url}")
+        result = ocr.process_document_url(args.url, not args.no_images)
     elif args.pdf:
+        print(f"Traitement du fichier PDF: {args.pdf}")
         result = ocr.process_pdf_file(args.pdf, not args.no_images)
-        ocr.save_ocr_result(result, args.output)
     elif args.image:
+        print(f"Traitement de l'image: {args.image}")
         result = ocr.process_image_file(args.image, not args.no_images)
-        ocr.save_ocr_result(result, args.output)
+    
+    # Si une erreur s'est produite
+    if "error" in result:
+        print(f"Erreur lors du traitement: {result['error']}")
+        sys.exit(1)
+    
+    # Sauvegarder le résultat selon le format demandé
+    base_output = args.output
+    if base_output.endswith(".json") or base_output.endswith(".md") or base_output.endswith(".html") or base_output.endswith(".pdf"):
+        base_output = os.path.splitext(base_output)[0]
+    
+    if args.format == "json" or args.format == "all":
+        ocr.save_ocr_result(result, base_output + ".json")
+    
+    if args.format == "md" or args.format == "all":
+        # Le fichier markdown est généré dans save_ocr_result
+        if args.format != "all":
+            md_file = base_output + ".md"
+            with open(md_file, "w", encoding="utf-8") as f:
+                for page in result.get("pages", []):
+                    f.write(f"### Page {page.get('index')}\n\n")
+                    f.write(page.get("markdown", "") + "\n\n")
+            print(f"Contenu en markdown sauvegardé dans {md_file}")
+    
+    if args.format == "html" or args.format == "all":
+        html_file = base_output + ".html"
+        if args.format != "all":
+            ocr.generate_html_output(result, html_file)
+        else:
+            # Si on génère tous les formats, on a besoin du fichier HTML pour le PDF
+            ocr.generate_html_output(result, html_file)
+    
+    if (args.format == "pdf" or args.format == "all") and PDF_AVAILABLE:
+        pdf_file = base_output + ".pdf"
+        html_file = base_output + ".html"
+        
+        # S'assurer que le fichier HTML existe
+        if not os.path.exists(html_file) and args.format == "pdf":
+            ocr.generate_html_output(result, html_file)
+        
+        # Convertir HTML en PDF
+        try:
+            # Utiliser le bon format pour WeasyPrint v60.2
+            HTML(filename=html_file).write_pdf(pdf_file)
+            print(f"Document PDF sauvegardé dans {pdf_file}")
+        except Exception as e:
+            print(f"Erreur lors de la génération du PDF: {str(e)}")
+    elif args.format == "pdf" and not PDF_AVAILABLE:
+        print("L'exportation PDF n'est pas disponible car WeasyPrint n'est pas installé.")
+        print("Pour l'installer: pip install weasyprint")
+    
+    # Si une question est posée
+    if args.question:
+        print(f"\nQuestion: {args.question}")
+        document_url = args.url
+        if args.pdf or args.image:
+            # Pour les questions sur des fichiers locaux, il faudrait d'abord les télécharger sur un serveur
+            print("La fonctionnalité de question n'est disponible que pour les URL de documents.")
+            sys.exit(1)
+        
+        answer = ocr.ask_question_about_document(document_url, args.question)
+        print(f"\nRéponse: {answer}")
 
 
 if __name__ == "__main__":
-    main()
+    main() 

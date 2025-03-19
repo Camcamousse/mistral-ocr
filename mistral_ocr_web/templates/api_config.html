@@ -131,13 +131,13 @@
 
             <!-- Messages flash -->
             {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="mb-4 p-4 rounded-md {% if category == 'error' %}bg-red-100 text-red-700{% elif category == 'warning' %}bg-yellow-100 text-yellow-700{% else %}bg-green-100 text-green-700{% endif %}">
-                            <p>{{ message }}</p>
-                        </div>
-                    {% endfor %}
-                {% endif %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="mb-4 p-4 rounded-md {% if category == 'error' %}bg-red-100 text-red-700{% elif category == 'warning' %}bg-yellow-100 text-yellow-700{% else %}bg-green-100 text-green-700{% endif %}">
+                        <p>{{ message|safe }}</p>
+                    </div>
+                {% endfor %}
+            {% endif %}
             {% endwith %}
 
             <div class="mb-8">
@@ -220,4 +220,4 @@
         });
     </script>
 </body>
-</html>
+</html> 

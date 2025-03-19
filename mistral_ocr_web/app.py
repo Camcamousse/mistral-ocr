@@ -14,18 +14,31 @@ import uuid
 # Importer notre script Mistral OCR
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from mistral_ocr import MistralOCR, PDF_AVAILABLE
+try:
+    from mistral_ocr import MistralOCR, PDF_AVAILABLE
+except ImportError as e:
+    print(f"Erreur d'importation de mistral_ocr.py: {str(e)}")
+    print("Assurez-vous que le fichier mistral_ocr.py est présent à la racine du projet.")
+    sys.exit(1)
 
 # Charger les variables d'environnement
 load_dotenv()
 
-# Désactiver WeasyPrint par défaut pour éviter les problèmes de dépendances
+# Désactiver WeasyPrint par défaut
 WEASYPRINT_AVAILABLE = False
-print("WeasyPrint est désactivé par défaut. L'exportation PDF ne sera pas disponible.")
-print("Pour l'activer sur macOS:")
-print("1. Installez les dépendances: brew install cairo pango gdk-pixbuf libffi")
-print("2. Puis: pip install weasyprint==52.5")
-print("3. Décommentez les lignes d'import dans mistral_ocr.py et app.py")
+
+# Utiliser la variable de mistral_ocr.py
+if PDF_AVAILABLE:
+    WEASYPRINT_AVAILABLE = True
+    print("PDF_AVAILABLE est True dans mistral_ocr.py, donc la génération PDF sera activée.")
+else:
+    print("\n=== INFO: Génération PDF désactivée dans l'application web ===")
+    print("La génération PDF est désactivée car PDF_AVAILABLE est False dans mistral_ocr.py")
+    print("Pour l'activer:")
+    print("1. Installez les dépendances système: brew install cairo pango gdk-pixbuf libffi")
+    print("2. Installez WeasyPrint: pip install weasyprint==52.5")
+    print("3. Modifiez mistral_ocr.py pour activer PDF_AVAILABLE")
+    print("================================\n")
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -69,8 +82,13 @@ def process_ocr(task_id, api_key, file_path=None, url=None, include_images=True,
         # Si aucun format n'est spécifié, utiliser tous les formats disponibles
         if output_formats is None:
             output_formats = ['json', 'md', 'html']
+            # N'ajouter PDF que si WeasyPrint est disponible
             if WEASYPRINT_AVAILABLE:
                 output_formats.append('pdf')
+        elif 'pdf' in output_formats and not WEASYPRINT_AVAILABLE:
+            # Si PDF est demandé mais pas disponible, on le retire et on l'indique
+            output_formats.remove('pdf')
+            print(f"Avertissement: PDF a été demandé mais WeasyPrint n'est pas disponible. Format PDF ignoré.")
         
         # Vérifier la taille du fichier si un fichier est fourni
         if file_path and os.path.exists(file_path):
@@ -182,13 +200,16 @@ def process_ocr(task_id, api_key, file_path=None, url=None, include_images=True,
                 
                 # Convertir HTML en PDF
                 try:
-                    # Générer le PDF à partir du HTML avec WeasyPrint
+                    # Importer WeasyPrint ici pour éviter les problèmes d'importation
                     from weasyprint import HTML
                     HTML(filename=html_file).write_pdf(pdf_file)
                     ocr_tasks[task_id]['result_paths']['pdf'] = pdf_file
+                    print(f"PDF généré avec succès: {pdf_file}")
                 except Exception as e:
                     print(f"Erreur lors de la génération du PDF: {str(e)}")
                     ocr_tasks[task_id]['result_paths']['pdf'] = None
+            elif 'pdf' in output_formats and not WEASYPRINT_AVAILABLE:
+                print(f"Impossible de générer le PDF car WeasyPrint n'est pas disponible")
             
             # Mettre à jour l'état de la tâche
             ocr_tasks[task_id]['status'] = 'completed'
@@ -213,34 +234,91 @@ def process_ocr(task_id, api_key, file_path=None, url=None, include_images=True,
         ocr_tasks[task_id]['error'] = str(e)
 
 def test_api_key(api_key):
-    """Teste la validité de la clé API Mistral"""
+    """Teste la validité de la clé API Mistral avec plusieurs méthodes"""
     try:
-        # URL de l'API Mistral pour vérifier la clé
-        # Utilisons l'endpoint models qui est plus léger et disponible pour tous les utilisateurs
+        print(f"Longueur de la clé API: {len(api_key)} caractères")
+        print(f"Préfixe de la clé: {api_key[:6]}...")
+        
+        # Vérifier le format de base de la clé
+        if not api_key.strip():
+            return False, "La clé API est vide"
+        
+        if not api_key.startswith("mis_"):
+            print("AVERTISSEMENT: La clé API ne commence pas par 'mis_', format potentiellement invalide")
+        
+        # Méthode 1: Vérifier avec l'endpoint models (la plus légère)
+        print("Méthode 1: Test avec l'endpoint models")
         url = "https://api.mistral.ai/v1/models"
         headers = {
             "Authorization": f"Bearer {api_key}"
         }
         
-        # Faire une requête simple pour vérifier la clé
-        response = requests.get(url, headers=headers)
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            print(f"Réponse models: {response.status_code}")
+            
+            if response.status_code == 200:
+                print("✓ Endpoint models: Succès")
+                return True, "Clé API valide"
+        except Exception as e:
+            print(f"Échec de la méthode 1: {str(e)}")
         
-        # Si la réponse est 200, la clé est valide pour l'API générale
-        if response.status_code == 200:
-            print(f"Clé API validée avec succès: {response.status_code}")
+        # Méthode 2: Vérifier avec l'endpoint chat (plus lourd)
+        print("Méthode 2: Test avec l'endpoint chat")
+        url = "https://api.mistral.ai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": "mistral-tiny",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "max_tokens": 1
+        }
+        
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=10)
+            print(f"Réponse chat: {response.status_code}")
+            
+            if response.status_code == 200:
+                print("✓ Endpoint chat: Succès")
+                return True, "Clé API valide"
+        except Exception as e:
+            print(f"Échec de la méthode 2: {str(e)}")
+        
+        # Méthode 3: Test direct avec le client Mistral
+        print("Méthode 3: Test avec le client Mistral")
+        try:
+            from mistralai import Mistral
+            client = Mistral(api_key=api_key)
+            
+            # On essaie juste d'initialiser le client et de récupérer les modèles disponibles
+            models = client.list_models()
+            print(f"✓ Client Mistral: Succès - {len(models)} modèles disponibles")
             return True, "Clé API valide"
-        else:
-            error_msg = f"Erreur de validation de la clé API: {response.status_code}"
-            if response.text:
-                try:
-                    error_data = response.json()
-                    error_msg += f" - {error_data.get('message', '')}"
-                except:
-                    error_msg += f" - {response.text}"
-            print(f"Erreur de validation: {error_msg}")
-            return False, error_msg
+        except Exception as e:
+            print(f"Échec de la méthode 3: {str(e)}")
+            # Vérifier si le message d'erreur indique un problème d'authentification
+            error_msg = str(e)
+            if "401" in error_msg or "Unauthorized" in error_msg:
+                print("✗ Client Mistral: Échec d'authentification")
+            else:
+                print(f"✗ Client Mistral: Erreur - {error_msg}")
+        
+        # Si on arrive ici, aucune méthode n'a fonctionné
+        error_msg = "La clé API n'est pas valide ou n'a pas les autorisations requises."
+        
+        # Ajouter des suggestions utiles
+        error_msg += "\n\nSuggestions:\n"
+        error_msg += "1. Vérifiez que vous avez bien copié la clé API complète depuis la console Mistral\n"
+        error_msg += "2. Assurez-vous que la clé n'a pas expiré ou n'a pas été révoquée\n"
+        error_msg += "3. Votre clé doit commencer par 'mis_' pour Mistral\n"
+        error_msg += "4. Vérifiez que votre clé a accès à l'API OCR de Mistral (certaines clés ont des restrictions)\n"
+        error_msg += "5. Créez une nouvelle clé API sur https://console.mistral.ai/api-keys/ si nécessaire"
+        
+        return False, error_msg
     except Exception as e:
-        print(f"Exception lors de la validation: {str(e)}")
+        print(f"Exception générale lors de la validation: {str(e)}")
         return False, f"Erreur lors de la vérification de la clé API: {str(e)}"
 
 @app.route('/')
@@ -265,7 +343,9 @@ def api_config():
         # Tester la validité de la clé API
         is_valid, message = test_api_key(api_key)
         if not is_valid:
-            flash(f"La clé API n'est pas valide: {message}", "error")
+            # Formatter le message d'erreur pour l'affichage HTML
+            error_html = message.replace('\n', '<br>')
+            flash(f"La clé API n'est pas valide: {error_html}", "error")
             return redirect(url_for('api_config'))
         
         # Masquer la clé pour les logs
@@ -292,216 +372,129 @@ def api_config():
 
 @app.route('/clear-api-key', methods=['POST'])
 def clear_api_key():
-    """Supprime la clé API de la session"""
+    """Effacer la clé API de la session"""
     if 'mistral_api_key' in session:
         session.pop('mistral_api_key')
-        flash("Clé API supprimée avec succès", "success")
+    flash("Clé API supprimée de la session", "success")
     return redirect(url_for('api_config'))
 
-@app.route('/process-file', methods=['POST'])
-def process_file():
-    """Traite un fichier téléchargé pour OCR"""
+@app.route('/process', methods=['POST'])
+def process():
+    """Endpoint pour démarrer le traitement OCR"""
     # Vérifier si une clé API est configurée
     api_key = get_api_key()
     if not api_key:
-        return jsonify({
-            'status': 'error',
-            'message': 'Clé API Mistral non configurée. Veuillez configurer votre clé API dans les paramètres.'
-        }), 400
+        return jsonify({'error': 'Clé API Mistral non configurée. Veuillez configurer votre clé API dans les paramètres.'}), 400
+    
+    # Récupérer les formats de sortie demandés
+    output_formats = request.form.getlist('output_formats')
+    if not output_formats:
+        output_formats = ['json', 'md', 'html']
+        if WEASYPRINT_AVAILABLE:
+            output_formats.append('pdf')
+    
+    task_id = str(uuid.uuid4())
+    
+    # Vérifier si une URL a été fournie
+    url = request.form.get('url')
+    if url and url.strip():
+        # Démarrer le traitement OCR en arrière-plan
+        thread = threading.Thread(target=process_ocr, args=(task_id, api_key, None, url.strip(), True, output_formats))
+        thread.daemon = True
+        thread.start()
+        return jsonify({'task_id': task_id})
     
     # Vérifier si un fichier a été téléchargé
     if 'file' not in request.files:
-        return jsonify({
-            'status': 'error',
-            'message': 'Aucun fichier n\'a été téléchargé'
-        }), 400
+        return jsonify({'error': 'Aucun fichier fourni'}), 400
     
     file = request.files['file']
-    
-    # Vérifier si le fichier a un nom
     if file.filename == '':
-        return jsonify({
-            'status': 'error',
-            'message': 'Aucun fichier sélectionné'
-        }), 400
+        return jsonify({'error': 'Aucun fichier sélectionné'}), 400
     
-    # Vérifier si le fichier est autorisé
-    if not allowed_file(file.filename):
-        return jsonify({
-            'status': 'error',
-            'message': 'Type de fichier non supporté. Formats acceptés: PDF, JPG, JPEG, PNG, GIF'
-        }), 400
+    # Vérifier la taille du fichier
+    try:
+        file_size = len(file.read())
+        file.seek(0)  # Réinitialiser le curseur du fichier
+        
+        if file_size > app.config['MAX_CONTENT_LENGTH']:
+            return jsonify({'error': f'Le fichier est trop volumineux. La taille maximale autorisée est de {app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)} Mo.'}), 413
+        
+        # Vérifier également la limite de l'API Mistral
+        if file_size > app.config['MISTRAL_API_MAX_SIZE']:
+            return jsonify({'error': f'Le fichier est trop volumineux pour l\'API Mistral. La taille maximale autorisée est de 52.4 Mo, mais votre fichier fait {file_size / (1024 * 1024):.1f} Mo. Veuillez réduire la taille du fichier ou le diviser en parties plus petites.'}), 413
+    except Exception as e:
+        return jsonify({'error': f'Erreur lors de la vérification du fichier: {str(e)}'}), 400
     
-    # Sauvegarder le fichier
-    filename = secure_filename(file.filename)
-    task_id = str(uuid.uuid4())
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}_{filename}")
-    file.save(file_path)
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}_{filename}")
+        file.save(file_path)
+        
+        # Démarrer le traitement OCR en arrière-plan
+        thread = threading.Thread(target=process_ocr, args=(task_id, api_key, file_path, None, True, output_formats))
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({'task_id': task_id})
     
-    # Récupérer les formats de sortie demandés
-    output_formats = request.form.getlist('output_formats')
-    if not output_formats:
-        output_formats = ['json', 'md', 'html']
-        if WEASYPRINT_AVAILABLE:
-            output_formats.append('pdf')
-    
-    # Lancer le traitement OCR en arrière-plan
-    thread = threading.Thread(target=process_ocr, args=(task_id, api_key, file_path, None, True, output_formats))
-    thread.daemon = True
-    thread.start()
-    
-    return jsonify({
-        'status': 'processing',
-        'task_id': task_id,
-        'message': 'Traitement OCR en cours'
-    })
+    return jsonify({'error': 'Type de fichier non autorisé'}), 400
 
-@app.route('/process-url', methods=['POST'])
-def process_url():
-    """Traite une URL pour OCR"""
-    # Vérifier si une clé API est configurée
-    api_key = get_api_key()
-    if not api_key:
-        return jsonify({
-            'status': 'error',
-            'message': 'Clé API Mistral non configurée. Veuillez configurer votre clé API dans les paramètres.'
-        }), 400
-    
-    # Récupérer l'URL
-    url = request.form.get('url', '').strip()
-    if not url:
-        return jsonify({
-            'status': 'error',
-            'message': 'Aucune URL fournie'
-        }), 400
-    
-    # Vérifier si l'URL est valide
-    if not url.startswith(('http://', 'https://')):
-        return jsonify({
-            'status': 'error',
-            'message': 'URL invalide. L\'URL doit commencer par http:// ou https://'
-        }), 400
-    
-    # Récupérer les formats de sortie demandés
-    output_formats = request.form.getlist('output_formats')
-    if not output_formats:
-        output_formats = ['json', 'md', 'html']
-        if WEASYPRINT_AVAILABLE:
-            output_formats.append('pdf')
-    
-    # Générer un ID de tâche
-    task_id = str(uuid.uuid4())
-    
-    # Lancer le traitement OCR en arrière-plan
-    thread = threading.Thread(target=process_ocr, args=(task_id, api_key, None, url, True, output_formats))
-    thread.daemon = True
-    thread.start()
-    
-    return jsonify({
-        'status': 'processing',
-        'task_id': task_id,
-        'message': 'Traitement OCR en cours'
-    })
-
-@app.route('/task-status/<task_id>')
-def task_status(task_id):
-    """Récupère l'état d'une tâche OCR"""
+@app.route('/status/<task_id>')
+def status(task_id):
+    """Endpoint pour vérifier l'état d'une tâche OCR"""
     if task_id not in ocr_tasks:
-        return jsonify({
-            'status': 'error',
-            'message': 'Tâche non trouvée'
-        }), 404
+        return jsonify({'error': 'Tâche non trouvée'}), 404
     
-    task = ocr_tasks[task_id]
-    
-    # Construire les URLs pour les résultats
-    result_urls = {}
-    for format_type, file_path in task.get('result_paths', {}).items():
-        if file_path:
-            result_urls[format_type] = url_for('download_result', task_id=task_id, format_type=format_type)
-    
-    return jsonify({
-        'status': task['status'],
-        'progress': task.get('progress', 0),
-        'error': task.get('error'),
-        'result_urls': result_urls
-    })
+    return jsonify(ocr_tasks[task_id])
 
-@app.route('/download-result/<task_id>/<format_type>')
-def download_result(task_id, format_type):
-    """Télécharge le résultat d'une tâche OCR"""
-    if task_id not in ocr_tasks:
-        flash("Tâche non trouvée", "error")
-        return redirect(url_for('index'))
+@app.route('/download/<task_id>/<format>')
+def download(task_id, format):
+    """Endpoint pour télécharger le résultat OCR dans le format spécifié"""
+    if task_id not in ocr_tasks or ocr_tasks[task_id]['status'] != 'completed':
+        return jsonify({'error': 'Résultat non disponible'}), 404
     
-    task = ocr_tasks[task_id]
+    if format not in ocr_tasks[task_id]['result_paths']:
+        return jsonify({'error': f'Format {format} non disponible'}), 404
     
-    if task['status'] != 'completed':
-        flash("Le traitement n'est pas encore terminé", "error")
-        return redirect(url_for('index'))
+    result_path = ocr_tasks[task_id]['result_paths'][format]
+    if result_path is None or not os.path.exists(result_path):
+        return jsonify({'error': 'Fichier non disponible ou non trouvé'}), 404
     
-    if format_type not in task.get('result_paths', {}):
-        flash(f"Format {format_type} non disponible", "error")
-        return redirect(url_for('index'))
+    # Déterminer le nom du fichier à télécharger
+    download_name = f"ocr_result.{format}"
     
-    file_path = task['result_paths'][format_type]
-    
-    if not os.path.exists(file_path):
-        flash("Fichier non trouvé", "error")
-        return redirect(url_for('index'))
-    
-    # Déterminer le type MIME
-    mime_type = 'application/octet-stream'  # Par défaut
-    if format_type == 'json':
-        mime_type = 'application/json'
-    elif format_type == 'md':
-        mime_type = 'text/markdown'
-    elif format_type == 'html':
-        mime_type = 'text/html'
-    elif format_type == 'pdf':
-        mime_type = 'application/pdf'
-    
-    return send_file(file_path, mimetype=mime_type, as_attachment=True, download_name=f"ocr_result.{format_type}")
+    return send_file(result_path, as_attachment=True, download_name=download_name)
 
-@app.route('/view-result/<task_id>/<format_type>')
-def view_result(task_id, format_type):
-    """Affiche le résultat d'une tâche OCR dans le navigateur"""
-    if task_id not in ocr_tasks:
-        flash("Tâche non trouvée", "error")
-        return redirect(url_for('index'))
+@app.route('/view/<task_id>/<format>')
+def view(task_id, format):
+    """Endpoint pour visualiser le résultat OCR dans le format spécifié"""
+    if task_id not in ocr_tasks or ocr_tasks[task_id]['status'] != 'completed':
+        return jsonify({'error': 'Résultat non disponible'}), 404
     
-    task = ocr_tasks[task_id]
+    if format not in ocr_tasks[task_id]['result_paths'] or format not in ['html', 'pdf']:
+        return jsonify({'error': f'Format {format} non disponible pour la visualisation'}), 404
     
-    if task['status'] != 'completed':
-        flash("Le traitement n'est pas encore terminé", "error")
-        return redirect(url_for('index'))
+    result_path = ocr_tasks[task_id]['result_paths'][format]
+    if result_path is None or not os.path.exists(result_path):
+        return jsonify({'error': 'Fichier non disponible ou non trouvé'}), 404
     
-    if format_type not in task.get('result_paths', {}):
-        flash(f"Format {format_type} non disponible", "error")
-        return redirect(url_for('index'))
-    
-    file_path = task['result_paths'][format_type]
-    
-    if not os.path.exists(file_path):
-        flash("Fichier non trouvé", "error")
-        return redirect(url_for('index'))
-    
-    # Déterminer le type MIME
-    mime_type = 'application/octet-stream'  # Par défaut
-    if format_type == 'json':
-        mime_type = 'application/json'
-    elif format_type == 'md':
-        mime_type = 'text/markdown'
-    elif format_type == 'html':
-        mime_type = 'text/html'
-    elif format_type == 'pdf':
-        mime_type = 'application/pdf'
-    
-    return send_file(file_path, mimetype=mime_type)
+    # Pour HTML et PDF, on peut les afficher directement dans le navigateur
+    return send_file(result_path)
+
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    """Gestionnaire d'erreur pour les fichiers trop volumineux"""
+    return jsonify({'error': f'Le fichier est trop volumineux. La taille maximale autorisée est de {app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)} Mo.'}), 413
 
 if __name__ == '__main__':
-    # Créer le dossier d'upload s'il n'existe pas
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    
-    # Démarrer l'application
-    app.run(debug=True)
+    # Utiliser waitress pour le serveur de production, plus stable que le serveur de développement Flask
+    try:
+        from waitress import serve
+        print("Démarrage du serveur avec Waitress...")
+        serve(app, host='0.0.0.0', port=5001)
+    except ImportError:
+        print("Waitress n'est pas installé, utilisation du serveur de développement Flask.")
+        print("AVERTISSEMENT: L'application est accessible à toutes les interfaces réseau.")
+        print("Pour des raisons de sécurité, utilisez cette configuration uniquement pour le développement.")
+        app.run(host='0.0.0.0', port=5001, debug=False) 
